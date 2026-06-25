@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { TENANT_COOKIE } from "@/lib/tenant"
+// Import from the dependency-free ids module, NOT lib/tenant — middleware runs in the Edge
+// runtime, and lib/tenant pulls in next/headers + (transitively) the Node-only Stream SDK.
+import { TENANT_COOKIE } from "@/lib/ids"
 
 // Mint a sandbox id on first visit. 16 hex chars of randomness keeps the derived Stream user id
 // (`<tenant>__<name>`) comfortably under Stream's 64-char limit while staying collision-safe.

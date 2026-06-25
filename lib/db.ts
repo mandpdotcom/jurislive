@@ -59,7 +59,6 @@ CREATE TABLE IF NOT EXISTS shows (
   started_at TEXT,
   tenant_id TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_shows_tenant ON shows(tenant_id);
 CREATE TABLE IF NOT EXISTS rsvps (
   show_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -121,8 +120,11 @@ async function migrate(client: Client) {
   }
   if (!has("tenant_id")) {
     await client.execute("ALTER TABLE shows ADD COLUMN tenant_id TEXT")
-    await client.execute("CREATE INDEX IF NOT EXISTS idx_shows_tenant ON shows(tenant_id)")
   }
+  // Create the index only after the column is guaranteed to exist — on a pre-tenant DB it was
+  // just added above; on a fresh DB it came from CREATE TABLE. (Putting this in SCHEMA would run
+  // it before the ALTER and fail on existing databases with "no such column: tenant_id".)
+  await client.execute("CREATE INDEX IF NOT EXISTS idx_shows_tenant ON shows(tenant_id)")
 }
 
 async function seedCatalog(client: Client) {
@@ -189,7 +191,13 @@ export function getClient(): Promise<Client> {
   const g = globalThis as unknown as { __vinylClient?: Promise<Client> }
   if (g.__vinylClient) return g.__vinylClient
   if (_client) return _client
-  _client = init()
+  // If init fails, clear the cached promise so the next request retries (instead of being stuck
+  // on a cached rejection — important across dev hot-reloads after a code fix).
+  _client = init().catch((err) => {
+    _client = null
+    g.__vinylClient = undefined
+    throw err
+  })
   g.__vinylClient = _client
   return _client
 }

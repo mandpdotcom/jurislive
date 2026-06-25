@@ -9,6 +9,9 @@ import { StreamChat } from "stream-chat"
 import { StreamClient } from "@stream-io/node-sdk"
 import { EVT_AUCTION_UPDATE, EVT_ITEM_SOLD, EVT_SHOW_ENDED, type ShowItem } from "./types"
 
+// Re-exported from the dependency-free ids module so existing importers keep working.
+export { toUserId } from "./ids"
+
 const apiKey = process.env.STREAM_API_KEY!
 const apiSecret = process.env.STREAM_API_SECRET!
 
@@ -19,11 +22,6 @@ export const chatServer = StreamChat.getInstance(apiKey, apiSecret)
 export const videoServer = new StreamClient(apiKey, apiSecret)
 
 export { apiKey }
-
-/** Sanitize a username into a valid Stream user id (lowercase, [a-z0-9_-]). */
-export function toUserId(raw: string): string {
-  return raw.toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 64) || "guest"
-}
 
 let systemEnsured = false
 async function ensureSystemUser() {
