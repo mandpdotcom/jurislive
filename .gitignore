@@ -34,3 +34,6 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local SQLite catalog + app state (regenerated/seeded on first run)
+/data
