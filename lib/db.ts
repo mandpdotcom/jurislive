@@ -56,8 +56,10 @@ CREATE TABLE IF NOT EXISTS shows (
   call_id TEXT,
   channel_id TEXT,
   created_at TEXT,
-  started_at TEXT
+  started_at TEXT,
+  tenant_id TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_shows_tenant ON shows(tenant_id);
 CREATE TABLE IF NOT EXISTS rsvps (
   show_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -113,8 +115,13 @@ CREATE TABLE IF NOT EXISTS orders (
 // CREATE TABLE IF NOT EXISTS never alters an existing table, so we patch columns here.
 async function migrate(client: Client) {
   const cols = await client.execute("PRAGMA table_info(shows)")
-  if (!cols.rows.some((c) => c.name === "started_at")) {
+  const has = (name: string) => cols.rows.some((c) => c.name === name)
+  if (!has("started_at")) {
     await client.execute("ALTER TABLE shows ADD COLUMN started_at TEXT")
+  }
+  if (!has("tenant_id")) {
+    await client.execute("ALTER TABLE shows ADD COLUMN tenant_id TEXT")
+    await client.execute("CREATE INDEX IF NOT EXISTS idx_shows_tenant ON shows(tenant_id)")
   }
 }
 

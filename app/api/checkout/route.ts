@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { AuctionError, checkoutShow } from "@/lib/store"
-import { toUserId } from "@/lib/stream-server"
+import { getTenant, tenantUser } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "user_id and show_id required" }, { status: 400 })
   }
   try {
-    const result = await checkoutShow(toUserId(body.user_id), body.show_id)
+    const result = await checkoutShow(tenantUser(await getTenant(), body.user_id), body.show_id)
     return NextResponse.json(result)
   } catch (err) {
     if (err instanceof AuctionError) return NextResponse.json({ error: err.message }, { status: 400 })

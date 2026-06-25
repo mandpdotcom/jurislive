@@ -57,6 +57,7 @@ export type Show = {
   channel_id: string
   created_at: string
   started_at: string | null // when the show flipped to live; null until then
+  tenant_id: string | null // sandbox owner; shows are only ever listed back to their own tenant
   // computed
   item_count?: number
   rsvp_count?: number

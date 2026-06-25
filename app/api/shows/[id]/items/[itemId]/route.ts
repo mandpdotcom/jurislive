@@ -9,7 +9,8 @@ import {
   placeBid,
   startItem,
 } from "@/lib/store"
-import { broadcastItem, toUserId } from "@/lib/stream-server"
+import { broadcastItem } from "@/lib/stream-server"
+import { getTenant, tenantUser } from "@/lib/tenant"
 import { EVT_AUCTION_UPDATE, EVT_ITEM_SOLD } from "@/lib/types"
 
 export const runtime = "nodejs"
@@ -25,12 +26,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string; itemId: string }> },
 ) {
   const { id, itemId } = await params
-  const show = await getShow(id)
+  const tenant = await getTenant()
+  const show = await getShow(id, tenant)
   if (!show) return NextResponse.json({ error: "Show not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
   const action = body.action as string
-  const userId = toUserId(body.user_id ?? "")
+  const userId = tenantUser(tenant, body.user_id ?? "")
   const isSeller = userId === show.seller_id
 
   try {
@@ -78,7 +80,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; itemId: string }> },
 ) {
   const { id, itemId } = await params
-  const show = await getShow(id)
+  const show = await getShow(id, await getTenant())
   if (!show) return NextResponse.json({ error: "Show not found" }, { status: 404 })
   const item = await getItem(itemId)
   if (item && item.status !== "queued") {

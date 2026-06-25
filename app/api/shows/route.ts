@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createShow, listShows } from "@/lib/store"
-import { toUserId } from "@/lib/stream-server"
+import { getTenant, tenantUser } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
 export async function GET() {
-  return NextResponse.json({ shows: await listShows() })
+  return NextResponse.json({ shows: await listShows(await getTenant()) })
 }
 
 export async function POST(req: NextRequest) {
@@ -13,8 +13,10 @@ export async function POST(req: NextRequest) {
   if (!body?.title || !body?.seller_id) {
     return NextResponse.json({ error: "title and seller_id are required" }, { status: 400 })
   }
+  const tenant = await getTenant()
   const show = await createShow({
-    seller_id: toUserId(body.seller_id),
+    tenant_id: tenant,
+    seller_id: tenantUser(tenant, body.seller_id),
     seller_name: body.seller_name ?? body.seller_id,
     title: String(body.title).slice(0, 120),
     scheduled_at: body.scheduled_at ?? new Date().toISOString(),

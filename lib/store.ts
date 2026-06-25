@@ -68,6 +68,7 @@ const ITEM_SELECT = `
 // ---- Shows ----
 
 export async function createShow(input: {
+  tenant_id: string
   seller_id: string
   seller_name: string
   title: string
@@ -78,8 +79,8 @@ export async function createShow(input: {
   const id = newId("show")
   await run(
     db,
-    `INSERT INTO shows (id, seller_id, seller_name, title, scheduled_at, genre_tags, cover_seed, status, call_id, channel_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)`,
+    `INSERT INTO shows (id, seller_id, seller_name, title, scheduled_at, genre_tags, cover_seed, status, call_id, channel_id, created_at, tenant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?)`,
     [
       id,
       input.seller_id,
@@ -91,9 +92,10 @@ export async function createShow(input: {
       id, // call_id
       id, // channel_id
       new Date().toISOString(),
+      input.tenant_id,
     ],
   )
-  return (await getShow(id))!
+  return (await getShow(id, input.tenant_id))!
 }
 
 /**
@@ -111,9 +113,12 @@ function withLiveExpiry(show: Show): Show {
   return show
 }
 
-export async function getShow(id: string): Promise<Show | undefined> {
+// Scoped to a tenant: a visitor can only ever read shows in their own sandbox. This also gates
+// every show-mutation route (golive/end/rsvp/reorder/items), which 404 when getShow returns
+// undefined for a show outside the caller's tenant.
+export async function getShow(id: string, tenant: string): Promise<Show | undefined> {
   const db = await getClient()
-  const show = await one<Show>(db, "SELECT * FROM shows WHERE id = ?", [id])
+  const show = await one<Show>(db, "SELECT * FROM shows WHERE id = ? AND tenant_id = ?", [id, tenant])
   if (!show) return undefined
   withLiveExpiry(show)
   show.item_count = Number(
@@ -125,13 +130,15 @@ export async function getShow(id: string): Promise<Show | undefined> {
   return show
 }
 
-export async function listShows(): Promise<Show[]> {
+export async function listShows(tenant: string): Promise<Show[]> {
   const db = await getClient()
   const shows = await many<Show>(
     db,
     `SELECT * FROM shows
+       WHERE tenant_id = ?
        ORDER BY CASE status WHEN 'live' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
                 datetime(scheduled_at) ASC`,
+    [tenant],
   )
   // Downgrade stale live shows, then re-apply the status ordering they were sorted by.
   const rank: Record<Show["status"], number> = { live: 0, scheduled: 1, ended: 2 }

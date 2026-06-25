@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { addItem, getShow, listItems } from "@/lib/store"
 import { getReleaseRaw } from "@/lib/db"
+import { getTenant } from "@/lib/tenant"
 import { GRADES, type SellMode } from "@/lib/types"
 
 export const runtime = "nodejs"
@@ -13,7 +14,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 // Seller adds a chosen pressing to the show's run order, with their own listing data.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  if (!(await getShow(id))) return NextResponse.json({ error: "Show not found" }, { status: 404 })
+  if (!(await getShow(id, await getTenant())))
+    return NextResponse.json({ error: "Show not found" }, { status: 404 })
 
   const body = await req.json().catch(() => null)
   const releaseId = Number(body?.release_id)

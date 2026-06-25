@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getShow, setShowStatus } from "@/lib/store"
-import { ensureShowChannel, toUserId } from "@/lib/stream-server"
+import { ensureShowChannel } from "@/lib/stream-server"
+import { getTenant, tenantUser } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -9,15 +10,16 @@ export const runtime = "nodejs"
 // seller's client on join({ create: true }).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const show = await getShow(id)
+  const tenant = await getTenant()
+  const show = await getShow(id, tenant)
   if (!show) return NextResponse.json({ error: "Show not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
-  if (toUserId(body.user_id ?? "") !== show.seller_id) {
+  if (tenantUser(tenant, body.user_id ?? "") !== show.seller_id) {
     return NextResponse.json({ error: "Only the seller can start this show" }, { status: 403 })
   }
 
   await ensureShowChannel(show.channel_id, show.seller_id, show.title)
   await setShowStatus(id, "live")
-  return NextResponse.json({ show: await getShow(id) })
+  return NextResponse.json({ show: await getShow(id, tenant) })
 }
