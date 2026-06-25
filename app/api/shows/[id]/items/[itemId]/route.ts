@@ -25,7 +25,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string; itemId: string }> },
 ) {
   const { id, itemId } = await params
-  const show = getShow(id)
+  const show = await getShow(id)
   if (!show) return NextResponse.json({ error: "Show not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
@@ -37,26 +37,26 @@ export async function POST(
     switch (action) {
       case "start": {
         if (!isSeller) return forbidden()
-        const item = startItem(id, itemId)
+        const item = await startItem(id, itemId)
         await broadcastItem(show.channel_id, EVT_AUCTION_UPDATE, item)
         return NextResponse.json({ item })
       }
       case "bid": {
         if (!body.user_id) return NextResponse.json({ error: "user_id required" }, { status: 400 })
-        const item = placeBid(itemId, userId, body.user_name ?? body.user_id, Number(body.amount))
+        const item = await placeBid(itemId, userId, body.user_name ?? body.user_id, Number(body.amount))
         await broadcastItem(show.channel_id, EVT_AUCTION_UPDATE, item)
         return NextResponse.json({ item })
       }
       case "claim": {
         if (!body.user_id) return NextResponse.json({ error: "user_id required" }, { status: 400 })
-        const item = claimItem(itemId, userId, body.user_name ?? body.user_id)
+        const item = await claimItem(itemId, userId, body.user_name ?? body.user_id)
         await broadcastItem(show.channel_id, EVT_ITEM_SOLD, item)
         return NextResponse.json({ item })
       }
       case "finalize":
       case "pass": {
         if (!isSeller) return forbidden()
-        const item = finalizeItem(itemId)
+        const item = await finalizeItem(itemId)
         await broadcastItem(
           show.channel_id,
           item.status === "sold" ? EVT_ITEM_SOLD : EVT_AUCTION_UPDATE,
@@ -78,13 +78,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; itemId: string }> },
 ) {
   const { id, itemId } = await params
-  const show = getShow(id)
+  const show = await getShow(id)
   if (!show) return NextResponse.json({ error: "Show not found" }, { status: 404 })
-  const item = getItem(itemId)
+  const item = await getItem(itemId)
   if (item && item.status !== "queued") {
     return NextResponse.json({ error: "Can only remove items that haven't gone live" }, { status: 400 })
   }
-  deleteItem(itemId)
+  await deleteItem(itemId)
   return NextResponse.json({ ok: true })
 }
 

@@ -7,5 +7,5 @@ export const runtime = "nodejs"
 export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("user_id")
   if (!raw) return NextResponse.json({ error: "user_id required" }, { status: 400 })
-  return NextResponse.json({ orders: listOrders(toUserId(raw)) })
+  return NextResponse.json({ orders: await listOrders(toUserId(raw)) })
 }

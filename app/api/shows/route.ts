@@ -5,7 +5,7 @@ import { toUserId } from "@/lib/stream-server"
 export const runtime = "nodejs"
 
 export async function GET() {
-  return NextResponse.json({ shows: listShows() })
+  return NextResponse.json({ shows: await listShows() })
 }
 
 export async function POST(req: NextRequest) {
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   if (!body?.title || !body?.seller_id) {
     return NextResponse.json({ error: "title and seller_id are required" }, { status: 400 })
   }
-  const show = createShow({
+  const show = await createShow({
     seller_id: toUserId(body.seller_id),
     seller_name: body.seller_name ?? body.seller_id,
     title: String(body.title).slice(0, 120),

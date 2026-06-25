@@ -7,17 +7,17 @@ export const runtime = "nodejs"
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  return NextResponse.json({ items: listItems(id) })
+  return NextResponse.json({ items: await listItems(id) })
 }
 
 // Seller adds a chosen pressing to the show's run order, with their own listing data.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  if (!getShow(id)) return NextResponse.json({ error: "Show not found" }, { status: 404 })
+  if (!(await getShow(id))) return NextResponse.json({ error: "Show not found" }, { status: 404 })
 
   const body = await req.json().catch(() => null)
   const releaseId = Number(body?.release_id)
-  if (!releaseId || !getReleaseRaw(releaseId)) {
+  if (!releaseId || !(await getReleaseRaw(releaseId))) {
     return NextResponse.json({ error: "Valid release_id required" }, { status: 400 })
   }
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const media_grade = GRADES.includes(body.media_grade) ? body.media_grade : "VG+"
   const sleeve_grade = GRADES.includes(body.sleeve_grade) ? body.sleeve_grade : "VG+"
 
-  const item = addItem({
+  const item = await addItem({
     show_id: id,
     release_id: releaseId,
     media_grade,

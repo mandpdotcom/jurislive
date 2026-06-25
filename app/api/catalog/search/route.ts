@@ -5,6 +5,6 @@ export const runtime = "nodejs"
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q") ?? ""
-  const results = searchCatalog(q)
-  return NextResponse.json({ results, stats: catalogStats() })
+  const results = await searchCatalog(q)
+  return NextResponse.json({ results, stats: await catalogStats() })
 }

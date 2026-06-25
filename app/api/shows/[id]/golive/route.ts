@@ -9,7 +9,7 @@ export const runtime = "nodejs"
 // seller's client on join({ create: true }).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const show = getShow(id)
+  const show = await getShow(id)
   if (!show) return NextResponse.json({ error: "Show not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
@@ -18,6 +18,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   await ensureShowChannel(show.channel_id, show.seller_id, show.title)
-  setShowStatus(id, "live")
-  return NextResponse.json({ show: getShow(id) })
+  await setShowStatus(id, "live")
+  return NextResponse.json({ show: await getShow(id) })
 }

@@ -2,7 +2,8 @@
 // cart, and (mocked) checkout. All auction state lives here on the server — clients send
 // intents and read state back; the video stream and chat channel never hold the source of truth.
 
-import { getDb } from "./db"
+import type { Client, InArgs, Transaction } from "@libsql/client"
+import { getClient } from "./db"
 import type { Order, SellMode, Show, ShowItem } from "./types"
 
 export const AUCTION_SECONDS = 30
@@ -12,6 +13,37 @@ export const MAX_LIVE_MINUTES = 120
 const EXTEND_WINDOW_MS = 10_000 // anti-snipe: a late bid bumps the clock back up to this
 const PLATFORM_FEE_RATE = 0.1 // 10% marketplace commission (Stripe Connect destination-charge shape)
 const SHIPPING_FLAT = 6
+
+// A query runs against either the pooled client or an open interactive transaction; helpers take
+// a DB so the same read can serve a plain lookup or a step inside a multi-statement transaction.
+type DB = Client | Transaction
+
+async function one<T>(db: DB, sql: string, args: InArgs = []): Promise<T | undefined> {
+  const rs = await db.execute({ sql, args })
+  return rs.rows[0] as T | undefined
+}
+async function many<T>(db: DB, sql: string, args: InArgs = []): Promise<T[]> {
+  const rs = await db.execute({ sql, args })
+  return rs.rows as unknown as T[]
+}
+async function run(db: DB, sql: string, args: InArgs = []): Promise<void> {
+  await db.execute({ sql, args })
+}
+
+// Run body inside a write transaction, committing on success and rolling back on throw.
+async function tx<T>(fn: (t: Transaction) => Promise<T>): Promise<T> {
+  const t = await (await getClient()).transaction("write")
+  try {
+    const result = await fn(t)
+    await t.commit()
+    return result
+  } catch (err) {
+    await t.rollback().catch(() => {})
+    throw err
+  } finally {
+    t.close()
+  }
+}
 
 export function bidIncrement(current: number): number {
   if (current < 50) return 1
@@ -35,29 +67,33 @@ const ITEM_SELECT = `
 
 // ---- Shows ----
 
-export function createShow(input: {
+export async function createShow(input: {
   seller_id: string
   seller_name: string
   title: string
   scheduled_at: string
   genre_tags: string
-}): Show {
-  const db = getDb()
+}): Promise<Show> {
+  const db = await getClient()
   const id = newId("show")
-  db.prepare(
+  await run(
+    db,
     `INSERT INTO shows (id, seller_id, seller_name, title, scheduled_at, genre_tags, cover_seed, status, call_id, channel_id, created_at)
-     VALUES (@id, @seller_id, @seller_name, @title, @scheduled_at, @genre_tags, @cover_seed, 'scheduled', @id, @id, @created_at)`,
-  ).run({
-    id,
-    seller_id: input.seller_id,
-    seller_name: input.seller_name,
-    title: input.title,
-    scheduled_at: input.scheduled_at,
-    genre_tags: input.genre_tags,
-    cover_seed: id,
-    created_at: new Date().toISOString(),
-  })
-  return getShow(id)!
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)`,
+    [
+      id,
+      input.seller_id,
+      input.seller_name,
+      input.title,
+      input.scheduled_at,
+      input.genre_tags,
+      id, // cover_seed
+      id, // call_id
+      id, // channel_id
+      new Date().toISOString(),
+    ],
+  )
+  return (await getShow(id))!
 }
 
 /**
@@ -75,29 +111,28 @@ function withLiveExpiry(show: Show): Show {
   return show
 }
 
-export function getShow(id: string): Show | undefined {
-  const db = getDb()
-  const show = db.prepare("SELECT * FROM shows WHERE id = ?").get(id) as Show | undefined
+export async function getShow(id: string): Promise<Show | undefined> {
+  const db = await getClient()
+  const show = await one<Show>(db, "SELECT * FROM shows WHERE id = ?", [id])
   if (!show) return undefined
   withLiveExpiry(show)
-  show.item_count = (
-    db.prepare("SELECT COUNT(*) AS n FROM show_items WHERE show_id = ?").get(id) as { n: number }
-  ).n
-  show.rsvp_count = (
-    db.prepare("SELECT COUNT(*) AS n FROM rsvps WHERE show_id = ?").get(id) as { n: number }
-  ).n
+  show.item_count = Number(
+    (await one<{ n: number }>(db, "SELECT COUNT(*) AS n FROM show_items WHERE show_id = ?", [id]))!.n,
+  )
+  show.rsvp_count = Number(
+    (await one<{ n: number }>(db, "SELECT COUNT(*) AS n FROM rsvps WHERE show_id = ?", [id]))!.n,
+  )
   return show
 }
 
-export function listShows(): Show[] {
-  const db = getDb()
-  const shows = db
-    .prepare(
-      `SELECT * FROM shows
+export async function listShows(): Promise<Show[]> {
+  const db = await getClient()
+  const shows = await many<Show>(
+    db,
+    `SELECT * FROM shows
        ORDER BY CASE status WHEN 'live' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
                 datetime(scheduled_at) ASC`,
-    )
-    .all() as Show[]
+  )
   // Downgrade stale live shows, then re-apply the status ordering they were sorted by.
   const rank: Record<Show["status"], number> = { live: 0, scheduled: 1, ended: 2 }
   shows.forEach(withLiveExpiry)
@@ -106,48 +141,47 @@ export function listShows(): Show[] {
       rank[a.status] - rank[b.status] || Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at),
   )
   for (const s of shows) {
-    s.item_count = (
-      db.prepare("SELECT COUNT(*) AS n FROM show_items WHERE show_id = ?").get(s.id) as {
-        n: number
-      }
-    ).n
-    s.rsvp_count = (
-      db.prepare("SELECT COUNT(*) AS n FROM rsvps WHERE show_id = ?").get(s.id) as { n: number }
-    ).n
+    s.item_count = Number(
+      (await one<{ n: number }>(db, "SELECT COUNT(*) AS n FROM show_items WHERE show_id = ?", [s.id]))!
+        .n,
+    )
+    s.rsvp_count = Number(
+      (await one<{ n: number }>(db, "SELECT COUNT(*) AS n FROM rsvps WHERE show_id = ?", [s.id]))!.n,
+    )
   }
   return shows
 }
 
-export function setShowStatus(id: string, status: Show["status"]): void {
-  const db = getDb()
+export async function setShowStatus(id: string, status: Show["status"]): Promise<void> {
+  const db = await getClient()
   if (status === "live") {
     // Record the live-start time so the show can be expired after MAX_LIVE_MINUTES.
-    db.prepare("UPDATE shows SET status = ?, started_at = ? WHERE id = ?").run(
+    await run(db, "UPDATE shows SET status = ?, started_at = ? WHERE id = ?", [
       status,
       new Date().toISOString(),
       id,
-    )
+    ])
   } else {
-    db.prepare("UPDATE shows SET status = ? WHERE id = ?").run(status, id)
+    await run(db, "UPDATE shows SET status = ? WHERE id = ?", [status, id])
   }
 }
 
-export function rsvp(showId: string, userId: string): number {
-  const db = getDb()
-  db.prepare("INSERT OR IGNORE INTO rsvps (show_id, user_id) VALUES (?, ?)").run(showId, userId)
-  return (db.prepare("SELECT COUNT(*) AS n FROM rsvps WHERE show_id = ?").get(showId) as { n: number })
-    .n
+export async function rsvp(showId: string, userId: string): Promise<number> {
+  const db = await getClient()
+  await run(db, "INSERT OR IGNORE INTO rsvps (show_id, user_id) VALUES (?, ?)", [showId, userId])
+  return Number(
+    (await one<{ n: number }>(db, "SELECT COUNT(*) AS n FROM rsvps WHERE show_id = ?", [showId]))!.n,
+  )
 }
 
-export function hasRsvp(showId: string, userId: string): boolean {
-  return !!getDb()
-    .prepare("SELECT 1 FROM rsvps WHERE show_id = ? AND user_id = ?")
-    .get(showId, userId)
+export async function hasRsvp(showId: string, userId: string): Promise<boolean> {
+  const db = await getClient()
+  return !!(await one(db, "SELECT 1 FROM rsvps WHERE show_id = ? AND user_id = ?", [showId, userId]))
 }
 
 // ---- Items / run order ----
 
-export function addItem(input: {
+export async function addItem(input: {
   show_id: string
   release_id: number
   media_grade: string
@@ -156,49 +190,72 @@ export function addItem(input: {
   sell_mode: SellMode
   starting_bid: number
   buy_now_price: number
-}): ShowItem {
-  const db = getDb()
+}): Promise<ShowItem> {
+  const db = await getClient()
   const id = newId("item")
-  const pos =
-    ((
-      db.prepare("SELECT MAX(position) AS m FROM show_items WHERE show_id = ?").get(input.show_id) as {
-        m: number | null
-      }
-    ).m ?? 0) + 1
-  db.prepare(
+  const maxRow = await one<{ m: number | null }>(
+    db,
+    "SELECT MAX(position) AS m FROM show_items WHERE show_id = ?",
+    [input.show_id],
+  )
+  const pos = (maxRow?.m ?? 0) + 1
+  await run(
+    db,
     `INSERT INTO show_items (id, show_id, release_id, position, media_grade, sleeve_grade, notes, sell_mode, starting_bid, buy_now_price, status)
-     VALUES (@id, @show_id, @release_id, @position, @media_grade, @sleeve_grade, @notes, @sell_mode, @starting_bid, @buy_now_price, 'queued')`,
-  ).run({ id, position: pos, ...input })
-  return getItem(id)!
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued')`,
+    [
+      id,
+      input.show_id,
+      input.release_id,
+      pos,
+      input.media_grade,
+      input.sleeve_grade,
+      input.notes,
+      input.sell_mode,
+      input.starting_bid,
+      input.buy_now_price,
+    ],
+  )
+  return (await getItem(id))!
 }
 
-export function getItem(id: string): ShowItem | undefined {
-  return getDb().prepare(`${ITEM_SELECT} WHERE si.id = ?`).get(id) as ShowItem | undefined
+async function getItemWith(db: DB, id: string): Promise<ShowItem | undefined> {
+  return one<ShowItem>(db, `${ITEM_SELECT} WHERE si.id = ?`, [id])
 }
 
-export function listItems(showId: string): ShowItem[] {
-  return getDb()
-    .prepare(`${ITEM_SELECT} WHERE si.show_id = ? ORDER BY si.position ASC`)
-    .all(showId) as ShowItem[]
+export async function getItem(id: string): Promise<ShowItem | undefined> {
+  return getItemWith(await getClient(), id)
 }
 
-export function deleteItem(id: string): void {
-  getDb().prepare("DELETE FROM show_items WHERE id = ? AND status = 'queued'").run(id)
+export async function listItems(showId: string): Promise<ShowItem[]> {
+  const db = await getClient()
+  return many<ShowItem>(db, `${ITEM_SELECT} WHERE si.show_id = ? ORDER BY si.position ASC`, [showId])
 }
 
-export function reorderItems(showId: string, orderedIds: string[]): void {
-  const db = getDb()
-  const upd = db.prepare("UPDATE show_items SET position = ? WHERE id = ? AND show_id = ?")
-  db.transaction(() => {
-    orderedIds.forEach((id, i) => upd.run(i + 1, id, showId))
-  })()
+export async function deleteItem(id: string): Promise<void> {
+  const db = await getClient()
+  await run(db, "DELETE FROM show_items WHERE id = ? AND status = 'queued'", [id])
+}
+
+export async function reorderItems(showId: string, orderedIds: string[]): Promise<void> {
+  const db = await getClient()
+  await db.batch(
+    orderedIds.map((id, i) => ({
+      sql: "UPDATE show_items SET position = ? WHERE id = ? AND show_id = ?",
+      args: [i + 1, id, showId],
+    })),
+    "write",
+  )
 }
 
 /** The item currently in front of the audience (live), if any. */
-export function getCurrentItem(showId: string): ShowItem | undefined {
-  return getDb()
-    .prepare(`${ITEM_SELECT} WHERE si.show_id = ? AND si.status = 'live' ORDER BY si.position LIMIT 1`)
-    .get(showId) as ShowItem | undefined
+export async function getCurrentItem(showId: string): Promise<ShowItem | undefined> {
+  const db = await getClient()
+  return one<ShowItem>(
+    db,
+    `${ITEM_SELECT} WHERE si.show_id = ? AND si.status = 'live' ORDER BY si.position LIMIT 1`,
+    [showId],
+  )
 }
 
 // ---- Auction engine (server-authoritative) ----
@@ -206,113 +263,127 @@ export function getCurrentItem(showId: string): ShowItem | undefined {
 export class AuctionError extends Error {}
 
 /** Seller brings an item to the front and opens it. Closes any other live item first. */
-export function startItem(showId: string, itemId: string): ShowItem {
-  const db = getDb()
-  const item = getItem(itemId)
+export async function startItem(showId: string, itemId: string): Promise<ShowItem> {
+  const item = await getItem(itemId)
   if (!item || item.show_id !== showId) throw new AuctionError("Item not found")
   if (item.status === "sold") throw new AuctionError("Item already sold")
 
-  db.transaction(() => {
+  await tx(async (t) => {
     // Any other live item that has bids gets finalized; otherwise it returns to the queue.
-    const live = db
-      .prepare("SELECT * FROM show_items WHERE show_id = ? AND status = 'live' AND id != ?")
-      .all(showId, itemId) as { id: string; high_bidder: string | null }[]
+    const live = await many<{ id: string; high_bidder: string | null }>(
+      t,
+      "SELECT id, high_bidder FROM show_items WHERE show_id = ? AND status = 'live' AND id != ?",
+      [showId, itemId],
+    )
     for (const l of live) {
-      if (l.high_bidder) finalizeItemInternal(l.id)
-      else db.prepare("UPDATE show_items SET status = 'queued', ends_at = NULL WHERE id = ?").run(l.id)
+      if (l.high_bidder) await finalizeItemInternal(t, l.id)
+      else await run(t, "UPDATE show_items SET status = 'queued', ends_at = NULL WHERE id = ?", [l.id])
     }
     const endsAt = item.sell_mode === "auction" ? Date.now() + AUCTION_SECONDS * 1000 : null
-    db.prepare("UPDATE show_items SET status = 'live', ends_at = ? WHERE id = ?").run(endsAt, itemId)
-  })()
-  return getItem(itemId)!
+    await run(t, "UPDATE show_items SET status = 'live', ends_at = ? WHERE id = ?", [endsAt, itemId])
+  })
+  return (await getItem(itemId))!
 }
 
-export function placeBid(
+export async function placeBid(
   itemId: string,
   userId: string,
   userName: string,
   amount: number,
-): ShowItem {
-  const db = getDb()
-  return db.transaction(() => {
-    const item = getItem(itemId)
+): Promise<ShowItem> {
+  return tx(async (t) => {
+    const item = await getItemWith(t, itemId)
     if (!item) throw new AuctionError("Item not found")
     if (item.sell_mode !== "auction") throw new AuctionError("This item is buy-it-now only")
     if (item.status !== "live") throw new AuctionError("Bidding is not open on this item")
     if (item.ends_at && Date.now() > item.ends_at) throw new AuctionError("Auction has ended")
 
-    const floor = item.current_bid != null
-      ? item.current_bid + bidIncrement(item.current_bid)
-      : item.starting_bid
+    const floor =
+      item.current_bid != null
+        ? item.current_bid + bidIncrement(item.current_bid)
+        : item.starting_bid
     if (amount < floor) throw new AuctionError(`Bid must be at least $${floor}`)
 
     let endsAt = item.ends_at!
     if (endsAt - Date.now() < EXTEND_WINDOW_MS) endsAt = Date.now() + EXTEND_WINDOW_MS // anti-snipe
 
-    db.prepare(
+    await run(
+      t,
       "UPDATE show_items SET current_bid = ?, high_bidder = ?, high_bidder_name = ?, ends_at = ? WHERE id = ?",
-    ).run(amount, userId, userName, endsAt, itemId)
-    db.prepare(
+      [amount, userId, userName, endsAt, itemId],
+    )
+    await run(
+      t,
       "INSERT INTO bids (item_id, user_id, user_name, amount, created_at) VALUES (?, ?, ?, ?, ?)",
-    ).run(itemId, userId, userName, amount, Date.now())
-    return getItem(itemId)!
-  })()
+      [itemId, userId, userName, amount, Date.now()],
+    )
+    return (await getItemWith(t, itemId))!
+  })
 }
 
 /** Buy-it-now: first claim wins. Works on auction items too (instant buy at buy_now_price if set). */
-export function claimItem(itemId: string, userId: string, userName: string): ShowItem {
-  const db = getDb()
-  return db.transaction(() => {
-    const item = getItem(itemId)
+export async function claimItem(
+  itemId: string,
+  userId: string,
+  userName: string,
+): Promise<ShowItem> {
+  return tx(async (t) => {
+    const item = await getItemWith(t, itemId)
     if (!item) throw new AuctionError("Item not found")
     if (item.status === "sold") throw new AuctionError("Already sold")
     if (item.status !== "live") throw new AuctionError("Item is not available to claim yet")
     if (!item.buy_now_price || item.buy_now_price <= 0)
       throw new AuctionError("No buy-it-now price on this item")
-    db.prepare(
+    await run(
+      t,
       "UPDATE show_items SET status = 'sold', winner = ?, winner_name = ?, final_price = ?, ends_at = NULL WHERE id = ?",
-    ).run(userId, userName, item.buy_now_price, itemId)
-    return getItem(itemId)!
-  })()
+      [userId, userName, item.buy_now_price, itemId],
+    )
+    return (await getItemWith(t, itemId))!
+  })
 }
 
-function finalizeItemInternal(itemId: string): void {
-  const db = getDb()
-  const item = getItem(itemId)
+async function finalizeItemInternal(t: Transaction, itemId: string): Promise<void> {
+  const item = await getItemWith(t, itemId)
   if (!item || item.status === "sold" || item.status === "unsold") return
   if (item.high_bidder) {
-    db.prepare(
+    await run(
+      t,
       "UPDATE show_items SET status = 'sold', winner = ?, winner_name = ?, final_price = ?, ends_at = NULL WHERE id = ?",
-    ).run(item.high_bidder, item.high_bidder_name, item.current_bid, itemId)
+      [item.high_bidder, item.high_bidder_name, item.current_bid, itemId],
+    )
   } else {
-    db.prepare("UPDATE show_items SET status = 'unsold', ends_at = NULL WHERE id = ?").run(itemId)
+    await run(t, "UPDATE show_items SET status = 'unsold', ends_at = NULL WHERE id = ?", [itemId])
   }
 }
 
 /** Close an auction: high bidder wins, or it goes unsold. Idempotent. */
-export function finalizeItem(itemId: string): ShowItem {
-  finalizeItemInternal(itemId)
-  return getItem(itemId)!
+export async function finalizeItem(itemId: string): Promise<ShowItem> {
+  await tx((t) => finalizeItemInternal(t, itemId))
+  return (await getItem(itemId))!
 }
 
 // ---- Cart & checkout (mocked Stripe Connect shape) ----
 
-export function getCart(userId: string): ShowItem[] {
-  return getDb()
-    .prepare(
-      `${ITEM_SELECT} WHERE si.winner = ? AND si.checked_out = 0 ORDER BY si.show_id, si.position`,
-    )
-    .all(userId) as ShowItem[]
+export async function getCart(userId: string): Promise<ShowItem[]> {
+  const db = await getClient()
+  return many<ShowItem>(
+    db,
+    `${ITEM_SELECT} WHERE si.winner = ? AND si.checked_out = 0 ORDER BY si.show_id, si.position`,
+    [userId],
+  )
 }
 
-export function checkoutShow(userId: string, showId: string): { order: Order; items: ShowItem[] } {
-  const db = getDb()
-  return db.transaction(() => {
-    const items = db
-      .prepare(
-        `${ITEM_SELECT} WHERE si.winner = ? AND si.show_id = ? AND si.checked_out = 0 ORDER BY si.position`,
-      )
-      .all(userId, showId) as ShowItem[]
+export async function checkoutShow(
+  userId: string,
+  showId: string,
+): Promise<{ order: Order; items: ShowItem[] }> {
+  return tx(async (t) => {
+    const items = await many<ShowItem>(
+      t,
+      `${ITEM_SELECT} WHERE si.winner = ? AND si.show_id = ? AND si.checked_out = 0 ORDER BY si.position`,
+      [userId, showId],
+    )
     if (items.length === 0) throw new AuctionError("Nothing to check out for this show")
 
     const subtotal = items.reduce((s, i) => s + (i.final_price ?? 0), 0)
@@ -322,21 +393,27 @@ export function checkoutShow(userId: string, showId: string): { order: Order; it
     const total = Math.round((subtotal + shipping) * 100) / 100
     const orderId = newId("ord")
 
-    db.prepare(
+    await run(
+      t,
       `INSERT INTO orders (id, user_id, show_id, subtotal, shipping, platform_fee, seller_payout, total, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?)`,
-    ).run(orderId, userId, showId, subtotal, shipping, platform_fee, seller_payout, total, new Date().toISOString())
+      [orderId, userId, showId, subtotal, shipping, platform_fee, seller_payout, total, new Date().toISOString()],
+    )
 
-    const mark = db.prepare("UPDATE show_items SET checked_out = 1, order_id = ? WHERE id = ?")
-    for (const it of items) mark.run(orderId, it.id)
+    for (const it of items) {
+      await run(t, "UPDATE show_items SET checked_out = 1, order_id = ? WHERE id = ?", [orderId, it.id])
+    }
 
-    const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId) as Order
+    const order = (await one<Order>(t, "SELECT * FROM orders WHERE id = ?", [orderId]))!
     return { order, items }
-  })()
+  })
 }
 
-export function listOrders(userId: string): Order[] {
-  return getDb()
-    .prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY datetime(created_at) DESC")
-    .all(userId) as Order[]
+export async function listOrders(userId: string): Promise<Order[]> {
+  const db = await getClient()
+  return many<Order>(
+    db,
+    "SELECT * FROM orders WHERE user_id = ? ORDER BY datetime(created_at) DESC",
+    [userId],
+  )
 }

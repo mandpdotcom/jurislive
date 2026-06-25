@@ -7,7 +7,7 @@ export const runtime = "nodejs"
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const show = getShow(id)
+  const show = await getShow(id)
   if (!show) return NextResponse.json({ error: "Show not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Only the seller can end this show" }, { status: 403 })
   }
 
-  setShowStatus(id, "ended")
+  await setShowStatus(id, "ended")
   await broadcast(show.channel_id, EVT_SHOW_ENDED, { showId: id })
-  return NextResponse.json({ show: getShow(id) })
+  return NextResponse.json({ show: await getShow(id) })
 }
