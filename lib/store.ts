@@ -159,6 +159,44 @@ export async function listShows(tenant: string): Promise<Show[]> {
   return shows
 }
 
+/** How many shows a tenant created within the trailing window — used to rate-limit creation. */
+export async function recentShowCount(tenant: string, withinMs: number): Promise<number> {
+  const db = await getClient()
+  const since = new Date(Date.now() - withinMs).toISOString()
+  const row = await one<{ n: number }>(
+    db,
+    "SELECT COUNT(*) AS n FROM shows WHERE tenant_id = ? AND created_at > ?",
+    [tenant, since],
+  )
+  return Number(row!.n)
+}
+
+// Sandboxes are ephemeral: a cron deletes shows (and everything hanging off them) older than this.
+export const SANDBOX_TTL_MS = 24 * 60 * 60_000
+
+/** Delete shows older than `olderThanMs` and cascade to their items, bids, orders, and rsvps. */
+export async function deleteStaleShows(olderThanMs = SANDBOX_TTL_MS): Promise<number> {
+  const db = await getClient()
+  const cutoff = new Date(Date.now() - olderThanMs).toISOString()
+  const stale = await many<{ id: string }>(db, "SELECT id FROM shows WHERE created_at < ?", [cutoff])
+  if (stale.length === 0) return 0
+
+  // No foreign keys, so cascade by hand: bids -> items -> orders/rsvps -> shows, scoped to the
+  // stale shows. One atomic batch keeps the delete all-or-nothing.
+  const staleShows = "SELECT id FROM shows WHERE created_at < ?"
+  await db.batch(
+    [
+      { sql: `DELETE FROM bids WHERE item_id IN (SELECT id FROM show_items WHERE show_id IN (${staleShows}))`, args: [cutoff] },
+      { sql: `DELETE FROM show_items WHERE show_id IN (${staleShows})`, args: [cutoff] },
+      { sql: `DELETE FROM orders WHERE show_id IN (${staleShows})`, args: [cutoff] },
+      { sql: `DELETE FROM rsvps WHERE show_id IN (${staleShows})`, args: [cutoff] },
+      { sql: "DELETE FROM shows WHERE created_at < ?", args: [cutoff] },
+    ],
+    "write",
+  )
+  return stale.length
+}
+
 export async function setShowStatus(id: string, status: Show["status"]): Promise<void> {
   const db = await getClient()
   if (status === "live") {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { chatServer, videoServer } from "@/lib/stream-server"
 import { getTenant, tenantUser } from "@/lib/tenant"
+import { cleanLabel } from "@/lib/moderation"
 
 export const runtime = "nodejs"
 
@@ -10,8 +11,8 @@ export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("user_id")
   if (!raw) return NextResponse.json({ error: "user_id required" }, { status: 400 })
 
-  const userId = tenantUser(await getTenant(), raw)
-  const name = raw
+  const name = cleanLabel(raw)
+  const userId = tenantUser(await getTenant(), name)
 
   await Promise.all([
     chatServer.upsertUsers([{ id: userId, name, role: "user" }]),
