@@ -61,7 +61,7 @@ Open http://localhost:3000. Sign in with any display name, then either browse th
 
 ### Per-visitor sandbox
 
-Because this is a public demo, each visitor is isolated. On first visit, middleware sets an anonymous `sb_<random>` cookie — a **tenant**. Shows are stored against that tenant and only ever listed back to it, and user identities are namespaced (`<tenant>__<name>`), so two visitors who both pick "DJ" can neither see each other's shows nor collide. Display names and show titles are run through a light profanity filter, show creation is rate-limited, and a daily cron prunes sandboxes older than 24h.
+Because this is a public demo, each visitor is isolated. On first visit, a Next.js proxy (`proxy.ts`) sets an anonymous `sb_<random>` cookie — a **tenant**. Shows are stored against that tenant and only ever listed back to it, and user identities are namespaced (`<tenant>__<name>`), so two visitors who both pick "DJ" can neither see each other's shows nor collide. Display names and show titles are run through a light profanity filter, show creation is rate-limited, and a daily cron prunes sandboxes older than 24h.
 
 ## Deploying to Vercel
 

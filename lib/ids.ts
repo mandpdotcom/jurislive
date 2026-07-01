@@ -1,6 +1,6 @@
-// Pure, dependency-free id helpers shared by Edge middleware, route handlers, and the Stream
+// Pure, dependency-free id helpers shared by the Edge proxy, route handlers, and the Stream
 // server module. Keep this module free of heavy imports (no Stream SDK, no next/headers) so it
-// stays safe to bundle into the Edge runtime that middleware runs in.
+// stays safe to bundle into the Edge runtime that proxy.ts runs in.
 
 export const TENANT_COOKIE = "sb"
 

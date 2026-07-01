@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-// Import from the dependency-free ids module, NOT lib/tenant — middleware runs in the Edge
+// Import from the dependency-free ids module, NOT lib/tenant — this proxy runs in the Edge
 // runtime, and lib/tenant pulls in next/headers + (transitively) the Node-only Stream SDK.
 import { TENANT_COOKIE } from "@/lib/ids"
 
@@ -10,7 +10,7 @@ function freshTenant(): string {
   return "sb_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16)
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const existing = request.cookies.get(TENANT_COOKIE)?.value
   const tenant = existing || freshTenant()
 
