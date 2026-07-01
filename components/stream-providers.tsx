@@ -33,8 +33,7 @@ export function StreamProviders({ auth, children }: { auth: Auth; children: Reac
   // and deletes the instance from the SDK's cache, so pairing it with getOrCreateInstance is the
   // "User token is not set" trap (the remount reuses the cached instance, then the prior
   // cleanup's async disconnect tears it down a tick later). The socket closes on tab unload,
-  // which is fine for this demo. (Deviates from the skill's canonical new+disconnectUser snippet;
-  // see docs/strict-mode-livestream-fixes.md.)
+  // which is fine for this demo.
   const [videoClient, setVideoClient] = useState<StreamVideoClient>()
   useEffect(() => {
     const tokenProvider = () =>

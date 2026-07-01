@@ -59,7 +59,7 @@ export default function SellerLivePage({ params }: { params: Promise<{ id: strin
     const c = videoClient.call("livestream", id)
     // Keep the join promise and only leave() after it settles — tearing down a call mid-join
     // strands its telemetry reporter on a dead connection (400 floods). Also covers navigating
-    // away while the join is still in flight. See docs/strict-mode-livestream-fixes.md.
+    // away while the join is still in flight.
     const joined = c
       .join({ create: true, data: { members: [{ user_id: auth.userId, role: "host" }] } })
       .then(async () => {

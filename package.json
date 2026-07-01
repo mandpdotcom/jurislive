@@ -1,8 +1,10 @@
 {
-  "name": ".scaffold",
-  "version": "0.0.1",
+  "name": "vinylstream-live-shopping-demo",
+  "version": "0.1.0",
   "type": "module",
   "private": true,
+  "description": "A live shopping demo for vinyl records built with Stream Video, Stream Chat, and Next.js — server-authoritative auctions broadcast over the show's chat channel.",
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
