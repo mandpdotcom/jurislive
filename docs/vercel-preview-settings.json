@@ -1,0 +1,4 @@
+{
+  "framework": "nextjs",
+  "ssoProtection": { "deploymentType": "all" }
+}

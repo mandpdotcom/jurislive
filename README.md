@@ -1,105 +1,94 @@
-# VinylStream — Live Shopping Demo
+# JURISLIVE
 
-A live shopping app for vinyl records, in the style of Whatnot, built with **[Stream Video](https://getstream.io/video/)** and **[Stream Chat](https://getstream.io/chat/)** on Next.js. Sellers go live, run a crate of records as timed auctions or buy-it-now listings, and buyers bid in real time while watching the stream.
+Démonstrateur français de marketplace de ventes aux enchères vidéo, en marque blanche pour les commissaires de justice. Dérivé du dépôt [GetStream/VinylStream](https://github.com/GetStream/vinylstream-live-shopping-react-demo), sous licence MIT, copyright original conservé dans `LICENSE`.
 
-It's a compact, readable reference for wiring Stream's livestream + chat SDKs into a real transactional flow: **auction state is server-authoritative** and broadcast to viewers as custom events on the show's chat channel — "bids ride the same realtime channel as chat" — while the server stays the single source of truth.
+**Aucune vente réelle. Aucun paiement. Aucune pièce d'identité.** Les études, profils, lots, caractéristiques, estimations et images sont fictifs. Aucun partenariat avec Jurisdrone n'est annoncé comme conclu.
 
-## What it demonstrates
+## Parcours
 
-- **Stream Video** livestreaming — a seller hosts, viewers watch a low-latency stream.
-- **Stream Chat** — live chat per show, plus a custom-event channel that carries authoritative auction updates (current bid, sold, show ended).
-- **Server-authoritative auctions** — bidding, anti-snipe clock extension, buy-it-now, and finalization all run in the backend (`lib/store.ts`), never trusting the client.
-- **A realistic catalog** — listings are bound to specific Discogs pressings (master → release), so the demo data mirrors a production Discogs ETL (see `scripts/etl-discogs.ts`).
-- **A safe public sandbox** — every visitor gets their own isolated sandbox (see below).
+- Marketplace nationale : catégories, recherche, filtre ville et sélection en mémoire.
+- Espaces `/etudes/rive-gauche`, `/etudes/rhone-alpes`, `/etudes/les-chartrons` : catalogues indépendants et identité personnalisable.
+- Fiches `/ventes/:id` et salles `/salle/:id` : lots, compte à rebours serveur, offres fictives, historique pseudonymisé.
+- `/console` : profils d'étude Paris, Lyon ou Bordeaux ; ouverture de lot, pause/reprise, clôture simulée, passage au suivant, fin et répétition sans effacement d'historique.
+- Journal technique filtré par étude, export JSON, chaînage SHA-256 et protections SQL contre les modifications ordinaires.
+- Vidéo : SDK GetStream conservés ; capture et diffusion sur action explicite lorsque configurés. Sans clés, uniquement aperçu caméra local et état « GetStream non connecté ».
 
-## Tech stack
+## Stack et reprise amont
 
-- Next.js (App Router) + React + TypeScript + Tailwind
-- Stream Video & Stream Chat (React SDKs on the client, Node SDK on the server)
-- libSQL / [Turso](https://turso.tech) for storage (a local SQLite file in dev; hosted in production)
+Next.js 16.4.2, React 19.3.1, TypeScript, Tailwind CSS 4, GetStream Video/Chat, `@libsql/client` compatible Turso. Les transactions d'écriture, l'autorité serveur, les contrôles de plancher et l'anti-sniping de 10 secondes de l'amont sont repris et durcis dans `lib/jurislive/engine.ts`.
 
-## Getting started
+Les anciennes routes sont conservées dans `legacy-upstream/app/` pour revue, mais ne sont plus servies. Le proxy renvoie 410 sur tout ancien endpoint `/api/*` hors `/api/jl/*`. Les anciens modules et composants restent dans l'historique et dans le dépôt pour faciliter la comparaison ; ils ne font pas partie du parcours JURISLIVE.
 
-### 1. Prerequisites
+Le schéma `jl_*` est additif : aucune table amont n'est détruite. Les montants sont des entiers en centimes, l'identité est issue d'un jeton aléatoire stocké haché côté serveur, et les mutations de vendeur exigent un rôle lié à l'étude ciblée. Les paramètres `user_id` ou `study_id` du navigateur ne confèrent aucun droit.
 
-- Node.js 20+
-- A free [Stream](https://getstream.io) account (for the API key + secret)
+## Démarrer
 
-### 2. Configure environment
-
-Copy the example and fill in your Stream credentials:
+Node.js 22 recommandé.
 
 ```bash
-cp .env.example .env
-```
-
-```ini
-STREAM_API_KEY=your_key
-STREAM_API_SECRET=your_secret
-```
-
-For **local development you can leave the Turso variables unset** — the app falls back to a local SQLite file at `data/vinylstream.db`, created and seeded automatically on first run.
-
-### 3. Install and run
-
-```bash
-npm install
+npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. Sign in with any display name, then either browse the seeded shows or host your own.
+Ouvrir `http://localhost:3000`. Sans variables Turso, la base locale `data/jurislive.db` est créée et contient 3 études, 4 ventes, 12 lots. Le stockage local est réservé au développement ou à l'aperçu privé, pas à Vercel.
 
-> **Tip:** every browser tab is an independent user, so you can play seller in one tab and buyer in another to see the live auction flow end to end.
+### Test à deux onglets
 
-## How it works
+1. Onglet vendeur : `/console`, sélectionner Paris, puis « Ouvrir » sur un lot.
+2. Onglet acheteur : `/salle/mobilite-paris`, « Essayer comme acheteur », puis « Enchérir pour de faux ».
+3. Observer l'offre dans la console, mettre en pause, reprendre, clôturer, ouvrir le lot suivant.
+4. Onglet « Mon identité » : changer nom ou couleur, consulter l'espace de l'étude.
+5. Onglet « Journal » : consulter les événements et exporter le JSON.
 
-- **`lib/db.ts`** — libSQL connection, schema, and catalog seed. One `getClient()` serves both the read-only catalog and mutable app state.
-- **`lib/store.ts`** — the data layer and the auction engine. All bidding/checkout logic lives here and runs inside transactions.
-- **`lib/stream-server.ts`** — server-side Stream clients; mints tokens and broadcasts auction events onto each show's chat channel.
-- **`app/api/*`** — thin route handlers that validate input, call the store, and broadcast.
-- **`app/watch`, `app/seller`, `app/shows`** — the viewer, seller console, and show pages.
+La session est en mémoire dans chaque onglet, expire après 4 heures et n'utilise aucun stockage navigateur. Un rechargement complet nécessite une nouvelle sélection de profil. Les favoris sont également limités à l'onglet.
 
-### Per-visitor sandbox
+## Variables Preview
 
-Because this is a public demo, each visitor is isolated. On first visit, a Next.js proxy (`proxy.ts`) sets an anonymous `sb_<random>` cookie — a **tenant**. Shows are stored against that tenant and only ever listed back to it, and user identities are namespaced (`<tenant>__<name>`), so two visitors who both pick "DJ" can neither see each other's shows nor collide. Display names and show titles are run through a light profanity filter, show creation is rate-limited, and a daily cron prunes sandboxes older than 24h.
+Configurer uniquement les variables **Preview** dans les réglages Vercel, jamais dans Git :
 
-## Deploying to Vercel
+| Variable | Utilisation |
+|---|---|
+| `TURSO_DATABASE_URL` | URL libSQL de la base de démonstration dédiée |
+| `TURSO_AUTH_TOKEN` | Accès serveur à cette base |
+| `STREAM_API_KEY` | Identifiant de l'application GetStream de démonstration |
+| `STREAM_API_SECRET` | Secret serveur pour jetons et appels GetStream |
 
-The local SQLite file won't persist on Vercel's ephemeral filesystem, so production uses a hosted libSQL database (Turso). No code changes — just environment variables.
+Sans Turso sur Vercel, le catalogue est **explicitement en lecture seule**. Aucun jeton de session ni aucune offre ne sont enregistrés. Sans GetStream, la simulation transactionnelle reste disponible si la base l'est ; aucun faux direct n'est affiché.
 
-1. Create a Turso database and grab its credentials:
+## Tests
 
-   ```bash
-   turso db create vinylstream
-   turso db show vinylstream --url      # -> libsql://vinylstream-<org>.turso.io
-   turso db tokens create vinylstream   # -> auth token
-   ```
-
-2. Set these environment variables in your Vercel project:
-
-   | Variable | Purpose |
-   |---|---|
-   | `STREAM_API_KEY` / `STREAM_API_SECRET` | Stream credentials |
-   | `TURSO_DATABASE_URL` | `libsql://…` database URL |
-   | `TURSO_AUTH_TOKEN` | Turso auth token |
-   | `CRON_SECRET` | Bearer secret for the cleanup cron (`openssl rand -hex 32`) |
-
-3. Deploy. The schema and catalog seed run automatically on first request, and the daily sandbox-cleanup cron is wired via `vercel.json`.
-
-> The cleanup cron is scheduled daily to fit Vercel's Hobby tier; bump the frequency in `vercel.json` on Pro if you want tighter cleanup.
-
-## Project layout
-
-```
-app/            Next.js routes (pages + API handlers)
-components/     UI components (incl. shadcn/ui in components/ui)
-lib/            data layer, auction engine, Stream server, tenant isolation
-scripts/        illustrative Discogs ETL (production catalog path)
-docs/           concept write-up
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm audit --omit=dev
+npm run build
 ```
 
-See [`docs/vinylstream-concept.md`](docs/vinylstream-concept.md) for the product concept behind the demo.
+La suite serveur utilise une base temporaire dédiée : elle ne touche pas le catalogue de démonstration actif. Elle couvre notamment usurpation d'identité, isolation des études, montants invalides, concurrence, idempotence, expiration, pause, anti-sniping et journal append-only.
 
-## License
+Une CI GitHub exécute ces contrôles. Le résultat local ne remplace pas le résultat distant de la CI.
 
-MIT — see [LICENSE](LICENSE).
+## Aperçu privé Computer
+
+`preview/` est un adaptateur de navigation pour l'aperçu privé. Il réutilise les mêmes composants et le serveur Next.js, sans réimplémenter le moteur. L'application cible Vercel reste Next.js avec ses routes natives.
+
+```bash
+node scripts/build-preview.mjs
+npm run start -- --hostname 0.0.0.0 --port 3001
+```
+
+L'aperçu dépend du serveur de cette session et de son disque local. Il ne démontre ni une persistance Turso distante, ni une disponibilité de production. Les SDK GetStream contiennent des références internes à des APIs navigateur indisponibles dans certains iframes ; la qualification vidéo se fait sur l'URL Vercel directe après configuration.
+
+## Limites assumées
+
+- Le sélecteur de profils est volontairement ouvert dans la démonstration protégée. Ce n'est ni du SSO métier, ni une authentification de commissaires de justice.
+- Les personnes ayant accès à la démo partagent ses études fictives. Les droits empêchent une session donnée de muter une autre étude, mais les visiteurs peuvent sélectionner un autre personnage démo.
+- Le journal n'est pas certifié, n'est pas un procès-verbal et ne résiste pas à un administrateur capable de réécrire toute la base et ses triggers. Un ancrage externe serait nécessaire.
+- La clôture est manuelle ; après expiration, le serveur refuse les offres, mais attend le commissaire pour clôturer visuellement le lot.
+- Actualisation de repli toutes les 1,5 secondes. Événements Stream utilisés comme invalidations, jamais comme source de vérité.
+- Pas de création libre de ventes/lots, d'import catalogue, de sous-domaines personnalisés, d'abonnements, de KYC, de paiement, d'enregistrement vidéo, de messagerie publique ou d'adjudication réelle dans cette version.
+- Validation juridique, authentification professionnelle, audit indépendant, test de charge multi-instances et qualification GetStream/Turso indispensables avant production.
+- Le cahier des charges annoncé en pièce jointe n'était pas accessible lors du développement. La référence disponible est la liste des dix exigences du message utilisateur.
+
+Voir [le dossier technique et de sécurité](docs/JURISLIVE-TECHNIQUE.md) et [le guide Vercel](docs/DEPLOIEMENT.md).
