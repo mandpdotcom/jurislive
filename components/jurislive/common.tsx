@@ -9,7 +9,7 @@ export function Photo({src,alt,className=""}:{src:string;alt:string;className?:s
   return <img src={`${base}${src}`} alt={alt} className={className} loading="lazy" width={724} height={543} onError={e=>{e.currentTarget.style.opacity=".2"}}/>
 }
 export function Status({status}:{status:Sale["status"]}) {
-  return <span className={`status ${status}`}><i/>{status==="live"?"Enchères démo ouvertes":status==="paused"?"Simulation en pause":status==="ended"?"Simulation terminée":"PRÊT À EXPLORER"}</span>
+  return <span className={`status ${status}`}><i/>{status==="live"?"Simulation en cours":status==="paused"?"Simulation en pause":status==="ended"?"Simulation terminée":"PRÊT À EXPLORER"}</span>
 }
 export function SaleCard({sale,study}:{sale:Sale;study?:Study}) {
   const {favorites,toggleFavorite}=useJuris(),fav=favorites.includes(sale.id)
