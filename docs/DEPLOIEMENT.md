@@ -18,10 +18,10 @@ Ne jamais copier de secret dans un ticket, un README, la pull request ou une con
 L'API Vercel accepte [la configuration de protection Preview](https://vercel.com/docs/rest-api/reference/endpoints/projects/update-an-existing-project) :
 
 ```json
-{ "ssoProtection": { "deploymentType": "preview" } }
+{ "ssoProtection": { "deploymentType": "all" } }
 ```
 
-Le fichier `vercel.json` ne suffit pas à activer cette protection : elle est un réglage du projet. La protection doit être confirmée dans l'API et par une ouverture anonyme qui arrive sur l'authentification Vercel, pas sur le catalogue.
+Le fichier `vercel.json` ne suffit pas à activer cette protection : elle est un réglage du projet. Tous les déploiements, pas seulement les Preview, sont protégés par précaution. La protection doit être confirmée dans l'API et par une ouverture anonyme qui arrive sur l'authentification Vercel, pas sur le catalogue.
 
 La CLI authentifiée permet :
 

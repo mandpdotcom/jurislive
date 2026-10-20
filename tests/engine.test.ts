@@ -98,4 +98,18 @@ test("expired session denied",async()=>{
   await (await getDB()).execute({sql:"UPDATE jl_sessions SET expires_at=? WHERE id=?",args:[Date.now()-1,buyer.session.id]})
   await rejects(()=>authenticate(buyer.token),401)
 })
+test("per-session rate limit rejects the ninth accepted offer in ten seconds",async()=>{
+  const b=await createSession("buyer")
+  await control(lyon.session,"materiel-lyon","start","lot-7")
+  for(let i=0;i<8;i++)await placeBid(b.session,"materiel-lyon","lot-7",1400000+i*25000,randomUUID())
+  await rejects(()=>placeBid(b.session,"materiel-lyon","lot-7",1600000,randomUUID()),429)
+})
+test("Vercel without Turso is read-only and cannot mint sessions",async()=>{
+  process.env.VERCEL="1"
+  try{
+    assert.equal((await catalog()).read_only,true)
+    assert.equal((await state("mobilite-paris")).storage,"unconfigured")
+    await rejects(()=>createSession("paris"),503)
+  }finally{delete process.env.VERCEL}
+})
 after(async()=>{(await getDB()).close();rmSync(dir,{recursive:true,force:true})})

@@ -19,6 +19,7 @@ export async function audit(tx: Transaction, study: string, actor: string, actio
   await tx.execute({sql:"INSERT INTO jl_audit(study_id,actor,action,entity,payload,created_at,prev_hash,hash) VALUES(?,?,?,?,?,?,?,?)",args:[study,actor,action,entity,payload,at,prev,digest]})
 }
 export async function createSession(persona: DemoPersona) {
+  if(process.env.VERCEL&&!process.env.TURSO_DATABASE_URL)throw new DomainError("Profils désactivés sur cette Preview : connectez Turso pour activer les simulations.",503)
   const profiles = {
     buyer: {role:"buyer" as const, study_id:null, name:"Acheteur démo"},
     paris: {role:"auctioneer" as const, study_id:"etude-paris", name:"Commissaire démo · Paris"},

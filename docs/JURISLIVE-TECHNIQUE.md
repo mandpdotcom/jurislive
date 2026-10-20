@@ -68,15 +68,21 @@ Versions principales testées : Next.js 16.4.2 et React/React DOM 19.3.1. Les r�
 
 ## Contrôles passés localement
 
-`tsc --noEmit`, ESLint sur le code actif, build Next.js optimisé et 22 tests serveur passent. La suite vérifie fixtures, jetons, profils inconnus, droits acheteur, isolation Lyon/Paris, lien vente/lot, durée, unicité du lot ouvert, interdiction d'auto-enchère, montants invalides, plancher, pas, idempotence, concurrence, anti-sniping, pause/reprise, expiration, clôture, personnalisation, chaîne d'audit et répétition sans effacement.
+`tsc --noEmit`, ESLint sur le code actif, build Next.js optimisé et 24 tests serveur passent. La suite vérifie fixtures, jetons, profils inconnus, droits acheteur, isolation Lyon/Paris, lien vente/lot, durée, unicité du lot ouvert, interdiction d'auto-enchère, montants invalides, plancher, pas, idempotence, concurrence, anti-sniping, pause/reprise, expiration, clôture, personnalisation, chaîne d'audit, répétition sans effacement, limite de fréquence et mode Vercel sans Turso.
 
 Le premier test de concurrence a révélé un verrouillage du pilote SQLite local ; la file d'écriture a été ajoutée et la suite complète rejouée avec succès. Cette correction n'est pas une qualification du comportement Turso distant sous charge.
 
 La recette navigateur a exercé la recherche, les catégories, l'état vide, les favoris, la connexion de démonstration, l'ouverture vendeur, l'offre acheteur dans un second navigateur, la réception de cette offre, la pause/reprise, la clôture, le lot suivant, la personnalisation réversible et l'export JSON.
 
+Huit tests HTTP supplémentaires passent contre le serveur Next.js : catalogue, endpoints historiques désactivés, authentification, rôle forgé, isolation des études, formats invalides, taille de requête et en-têtes de non-cache. Les parcours hébergés ont également été testés dans un iframe opaque sans stockage navigateur. Aucun débordement horizontal n'a été détecté à 375px et 1440px sur les six pages principales, la salle et le studio ; aucune exception JavaScript applicative n'a été relevée dans le contexte hébergé.
+
 ## Déploiement et réserves
 
-Le projet Vercel `jurislive` appartient à l'équipe Llocs et est relié au dépôt GitHub. La protection SSO des Preview est configurée via l'API officielle ; la [documentation Vercel](https://vercel.com/docs/rest-api/reference/endpoints/projects/update-an-existing-project) décrit `ssoProtection.deploymentType = preview`.
+Le projet Vercel `jurislive` appartient à l'équipe Llocs et est relié au dépôt GitHub. La protection SSO est configurée sur tous les déploiements, avec `ssoProtection.deploymentType = all`, conformément aux valeurs de la [documentation Vercel](https://vercel.com/docs/rest-api/reference/endpoints/projects/update-an-existing-project). Une ouverture anonyme du lien Preview redirige vers la connexion Vercel.
+
+La connexion Git a aussi déclenché un déploiement automatique de la branche amont `main`. La suppression de ce déploiement a été refusée par l'API (403) ; il reste présent mais protégé. Sa suppression depuis le tableau de bord Llocs est une action résiduelle. La tentative de déploiement CLI est restée sans état terminal exploitable ; le déploiement Preview retenu est celui du workflow Git, confirmé READY.
+
+La création automatique d'un jeton de contournement pour la recette a été refusée. La protection est donc vérifiée, mais le parcours de l'application derrière le SSO Vercel n'a pas été ouvert dans ce navigateur isolé. Les tests fonctionnels de bout en bout ont été réalisés sur l'aperçu privé hébergé, pas prétendus sur Vercel.
 
 Sans `TURSO_DATABASE_URL`, un déploiement Vercel affiche un catalogue explicitement en lecture seule. Les écritures et profils sont refusés ; aucun fallback SQLite éphémère n'est utilisé. L'aperçu privé peut utiliser le disque local du serveur de développement et est distingué de Vercel.
 

@@ -12,7 +12,7 @@ Adaptation du fork VinylStream MIT en marketplace française pour commissaires d
 - Projet Vercel `jurislive` créé dans Llocs, connecté à ce dépôt, protection Preview activée.
 
 ### Validation
-- TypeScript, ESLint, build Next.js et 22 tests serveur passent localement.
+- TypeScript, ESLint, build Next.js, 24 tests serveur et 8 tests HTTP passent localement.
 - Parcours vendeur et acheteur vérifié sur deux contextes navigateur, mobile 375px et bureau.
 - Audit runtime : zéro vulnérabilité connue lors de la vérification ; 5 alertes élevées restent dans la chaîne ESLint de développement et sont documentées.
 - Isolation, montants invalides, concurrence, rejeu, pause, expiration et audit testés.
@@ -24,5 +24,7 @@ Adaptation du fork VinylStream MIT en marketplace française pour commissaires d
 - Tests multi-instances Turso, permissions GetStream, appareils iOS/Android réels, audit externe et validation juridique restent nécessaires.
 - Pièce jointe annoncée non accessible : spécification de référence disponible = les 10 exigences du message.
 - Aucun partenariat Jurisdrone conclu ou revendiqué.
+- Tous les déploiements du projet sont désormais protégés. Un déploiement automatique initial de `main` reste présent car sa suppression API est refusée (403) ; suppression à effectuer dans le dashboard. La Preview de référence provient du workflow Git et est READY.
+- Protection Vercel vérifiée par redirection vers la connexion. Pas de contournement SSO disponible pour la recette de l'application : le parcours derrière SSO reste à contrôler avec un compte autorisé.
 
 Ne pas fusionner ni promouvoir en production avant revue et validation. La démo reste volontairement non transactionnelle au sens commercial.
