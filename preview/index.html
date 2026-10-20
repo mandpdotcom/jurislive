@@ -1,0 +1,6 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title>JURISLIVE · Démonstration privée</title><link rel="preconnect" href="https://api.fontshare.com"><link href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700&f[]=boska@400,500&display=swap" rel="stylesheet"><link rel="stylesheet" href="./app.css"></head><body><div id="root"></div><script>
+const raw="__PORT_3001__";
+window.__JURISLIVE_API__=raw.startsWith("__PORT_") ? (["localhost","127.0.0.1"].includes(location.hostname)?"http://localhost:3001":"") : new URL(raw.replace(/\/$/,"")+"/",location.href).href.replace(/\/$/,"");
+window.__JURISLIVE_ASSETS__=new URL(".",location.href).href.replace(/\/$/,"");
+</script><script type="module" src="./entry.js"></script></body></html>

@@ -1,15 +1,16 @@
 {
-  "name": "vinylstream-live-shopping-demo",
+  "name": "jurislive-demo",
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "description": "A live shopping demo for vinyl records built with Stream Video, Stream Chat, and Next.js — server-authoritative auctions broadcast over the show's chat channel.",
+  "description": "JURISLIVE : démonstrateur français de ventes vidéo multi-études, dérivé de VinylStream MIT.",
   "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint app components/jurislive lib/jurislive proxy.ts",
+    "test": "tsx --test tests/engine.test.ts",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit"
   },
@@ -21,11 +22,10 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.18.0",
-    "next": "16.2.6",
+    "next": "^16.4.2",
     "next-themes": "^0.4.6",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "shadcn": "^4.11.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "sonner": "^2.0.7",
     "stream-chat": "^9.46.0",
     "stream-chat-react": "^14.4.1",
@@ -33,15 +33,18 @@
     "tw-animate-css": "^1.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "^16.4.2",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

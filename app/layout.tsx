@@ -1,40 +1,14 @@
-import { Geist, Geist_Mono } from "next/font/google"
-
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
-import { AppProviders } from "@/components/app-providers"
-import { Toaster } from "@/components/ui/sonner"
-import { cn } from "@/lib/utils";
-
+import { JurisProvider } from "@/components/jurislive/provider"
+import { Shell } from "@/components/jurislive/shell"
 export const metadata = {
-  title: "VinylStream — Live shopping for vinyl records",
-  description: "Watch sellers spin and sell rare pressings live. Bid, claim, and win on camera.",
+  title: {default:"JURISLIVE · Les enchères, au plus près.",template:"%s · JURISLIVE"},
+  description:"Démonstrateur de marketplace de ventes aux enchères vidéo pour les commissaires de justice. Études et lots fictifs. Aucune adjudication réelle.",
+  robots:{index:false,follow:false},
 }
-
-const geist = Geist({subsets:['latin'],variable:'--font-sans'})
-
-const fontMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-})
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
-  return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", geist.variable)}
-    >
-      <body>
-        <ThemeProvider>
-          <AppProviders>{children}</AppProviders>
-          <Toaster richColors position="top-center" />
-        </ThemeProvider>
-      </body>
-    </html>
-  )
+export default function RootLayout({children}:{children:React.ReactNode}) {
+  return <html lang="fr"><head>
+    <link rel="preconnect" href="https://api.fontshare.com" />
+    <link href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700&f[]=boska@400,500&display=swap" rel="stylesheet" />
+  </head><body><JurisProvider><Shell>{children}</Shell></JurisProvider></body></html>
 }
